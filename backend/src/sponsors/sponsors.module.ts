@@ -11,6 +11,7 @@ import { AuditModule } from 'src/audit/audit.module';
 import { NotificationModule } from 'src/notifications/notification.module';
 import { User } from 'src/users/entities/user.entity';
 import { Event } from 'src/events/entities/event.entity';
+import { EscrowModule } from 'src/payments/escrow.module';
 
 @Module({
   imports: [
@@ -19,6 +20,7 @@ import { Event } from 'src/events/entities/event.entity';
     StellarModule,
     AuditModule,
     NotificationModule,
+    EscrowModule,
   ],
   controllers: [SponsorsController],
   providers: [SponsorsService, ContributionsService],

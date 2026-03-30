@@ -15,6 +15,8 @@ import { AuditService } from '../../audit/audit.service';
 import { EscrowService } from '../services/escrow.service';
 import { NotificationService } from '../../notifications/notification.service';
 import { RefundResultDto } from './dto/refund-result.dto';
+import { paginate } from '../../common/pagination/pagination.helper';
+import { PaginationDto } from '../../common/pagination/dto/pagination.dto';
 
 @Injectable()
 export class RefundService {
@@ -123,6 +125,75 @@ export class RefundService {
   }
 
   // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC — checkRefundEligibility(paymentId)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  async checkRefundEligibility(
+    paymentId: string,
+  ): Promise<{ eligible: boolean; reason?: string; refundAmount: number }> {
+    const payment = await this.paymentsRepository.findOne({
+      where: { id: paymentId },
+    });
+    if (!payment) throw new NotFoundException(`Payment "${paymentId}" not found.`);
+
+    const user = await this.usersRepository.findOne({
+      where: { id: payment.userId },
+      select: ['id', 'stellarPublicKey'],
+    });
+
+    if (!user?.stellarPublicKey) {
+      return { eligible: false, reason: 'No Stellar wallet linked', refundAmount: 0 };
+    }
+
+    const hoursSincePurchase =
+      (Date.now() - payment.createdAt.getTime()) / (1000 * 60 * 60);
+    const FULL_REFUND_WINDOW_HOURS = Number(
+      process.env.FULL_REFUND_WINDOW_HOURS ?? 48,
+    );
+    const PARTIAL_REFUND_RATE = Number(process.env.PARTIAL_REFUND_RATE ?? 0.5);
+
+    const refundAmount =
+      hoursSincePurchase <= FULL_REFUND_WINDOW_HOURS
+        ? Number(payment.amount)
+        : Number(payment.amount) * PARTIAL_REFUND_RATE;
+
+    return { eligible: true, refundAmount };
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC — getRefundHistoryForEvent(eventId, dto)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  async getRefundHistoryForEvent(eventId: string, dto: PaginationDto) {
+    const event = await this.eventsRepository.findOne({ where: { id: eventId } });
+    if (!event) throw new NotFoundException(`Event "${eventId}" not found.`);
+
+    const qb = this.paymentsRepository
+      .createQueryBuilder('payment')
+      .where('payment.eventId = :eventId AND payment.status = :status', {
+        eventId,
+        status: PaymentStatus.REFUNDED,
+      });
+
+    return paginate(qb, dto, 'payment');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
+  // PUBLIC — getMyRefunds(userId, dto)
+  // ─────────────────────────────────────────────────────────────────────────
+
+  async getMyRefunds(userId: string, dto: PaginationDto) {
+    const qb = this.paymentsRepository
+      .createQueryBuilder('payment')
+      .where('payment.userId = :userId AND payment.status = :status', {
+        userId,
+        status: PaymentStatus.REFUNDED,
+      });
+
+    return paginate(qb, dto, 'payment');
+  }
+
+  // ─────────────────────────────────────────────────────────────────────────
   // PRIVATE — process a single payment refund
   // ─────────────────────────────────────────────────────────────────────────
 
@@ -137,16 +208,22 @@ export class RefundService {
     > = {
       paymentId: payment.id,
       userId: payment.userId,
-      amount: Number(payment.amount),
+      amount: Number(payment.amount), // updated below after eligibility check
       currency: payment.currency,
     };
 
     try {
-      // 1. Reject partial-amount guard — amount must be an exact positive value
-      const amount = Number(payment.amount);
+      // 1. Check eligibility and compute refund amount per policy
+      const eligibility = await this.checkRefundEligibility(payment.id);
+      if (!eligibility.eligible) {
+        throw new BadRequestException(eligibility.reason);
+      }
+
+      const amount = eligibility.refundAmount;
+      base.amount = amount; // reflect actual refund amount in result
       if (!Number.isFinite(amount) || amount <= 0) {
         throw new BadRequestException(
-          `Invalid payment amount "${payment.amount}" — partial or zero refunds are rejected.`,
+          `Computed refund amount is zero or invalid for payment "${payment.id}".`,
         );
       }
 
@@ -166,7 +243,7 @@ export class RefundService {
         );
       }
 
-      // 3. Send exact amount back to the original payer via StellarService
+      // 3. Send computed amount back to the original payer via StellarService
       const txResponse = await this.stellarService.sendPayment(
         escrowSecret,
         user.stellarPublicKey,

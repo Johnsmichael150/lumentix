@@ -113,4 +113,20 @@ export class SponsorsController {
   confirmContribution(@Body() dto: ConfirmContributionDto) {
     return this.contributionsService.confirmContribution(dto.transactionHash);
   }
+
+  // ── Escrow distribution (organizer / admin) ───────────────────────────────
+
+  @Post('distribute')
+  @Roles(Role.ORGANIZER, Role.ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Distribute escrow to organizer', description: 'Releases sponsor funds from escrow to the organizer Stellar wallet. Event must be COMPLETED.' })
+  @ApiResponse({ status: 201, description: 'Funds distributed' })
+  @ApiResponse({ status: 400, description: 'Bad Request' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  distributeEscrow(
+    @Param('eventId', ParseUUIDPipe) eventId: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.sponsorsService.distributeEscrow(eventId, req.user.id, req.user.role);
+  }
 }

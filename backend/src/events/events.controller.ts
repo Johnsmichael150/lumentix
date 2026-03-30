@@ -114,6 +114,19 @@ export class EventsController {
     return this.eventsService.deleteEvent(id, req.user.id);
   }
 
+  @Post(':id/cancel')
+  @Roles(Role.ORGANIZER)
+  @ApiOperation({ summary: 'Cancel an event', description: 'Organizer-only. Cancels the event and automatically triggers refunds.' })
+  @ApiResponse({ status: 201, description: 'Event cancelled' })
+  @ApiResponse({ status: 403, description: 'Forbidden' })
+  @ApiResponse({ status: 404, description: 'Event not found' })
+  cancel(
+    @Param('id', ParseUUIDPipe) id: string,
+    @Req() req: AuthenticatedRequest,
+  ) {
+    return this.eventsService.cancelEvent(id, req.user.id);
+  }
+
   @Get(':eventId/tickets')
   @Roles(Role.ORGANIZER)
   @ApiOperation({ summary: 'Get event tickets', description: 'Organizer-only. Lists all tickets sold for the event.' })

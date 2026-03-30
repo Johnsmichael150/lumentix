@@ -9,6 +9,7 @@ import { NotificationModule } from '../notifications/notification.module';
 import { EscrowModule } from '../payments/escrow.module';
 import { User } from '../users/entities/user.entity';
 import { TicketEntity } from '../tickets/entities/ticket.entity';
+import { RefundModule } from '../payments/refunds/refund.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { TicketEntity } from '../tickets/entities/ticket.entity';
     forwardRef(() => TicketsModule),
     NotificationModule,
     EscrowModule,
+    forwardRef(() => RefundModule),
   ],
   controllers: [EventsController],
   providers: [EventsService, EventStateService],

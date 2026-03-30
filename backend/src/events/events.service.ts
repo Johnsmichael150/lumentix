@@ -1,6 +1,7 @@
 import {
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -14,6 +15,8 @@ import { NotificationService } from '../notifications/notification.service';
 import { User } from '../users/entities/user.entity';
 import { TicketEntity } from '../tickets/entities/ticket.entity';
 import { EscrowService } from '../payments/services/escrow.service';
+import { Inject, forwardRef } from '@nestjs/common';
+import { RefundService } from '../payments/refunds/refund.service';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -25,6 +28,8 @@ export interface PaginatedResult<T> {
 
 @Injectable()
 export class EventsService {
+  private readonly logger = new Logger(EventsService.name);
+
   constructor(
     @InjectRepository(Event)
     private readonly eventRepository: Repository<Event>,
@@ -35,6 +40,8 @@ export class EventsService {
     private readonly eventStateService: EventStateService,
     private readonly notificationService: NotificationService,
     private readonly escrowService: EscrowService,
+    @Inject(forwardRef(() => RefundService))
+    private readonly refundService: RefundService,
   ) {}
 
   async createEvent(dto: CreateEventDto, organizerId: string): Promise<Event> {
@@ -129,6 +136,28 @@ export class EventsService {
     }
 
     await this.eventRepository.remove(event);
+  }
+
+  async cancelEvent(id: string, callerId: string): Promise<Event> {
+    const event = await this.getEventById(id);
+
+    if (event.organizerId !== callerId) {
+      throw new ForbiddenException('You are not the organiser of this event.');
+    }
+
+    this.eventStateService.validateTransition(event.status, EventStatus.CANCELLED);
+
+    event.status = EventStatus.CANCELLED;
+    const saved = await this.eventRepository.save(event);
+
+    // Non-blocking refund trigger — failures are logged, not thrown
+    this.refundService.refundEvent(id).catch((err) =>
+      this.logger.error(`Refund trigger failed for event ${id}`, err),
+    );
+
+    this.queueLifecycleEmail(saved).catch(() => undefined);
+
+    return saved;
   }
 
   async getEventById(id: string): Promise<Event> {

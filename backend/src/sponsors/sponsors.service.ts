@@ -2,20 +2,37 @@ import {
   Injectable,
   NotFoundException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { SponsorTier } from './entities/sponsor-tier.entity';
+import { SponsorContribution, ContributionStatus } from './entities/sponsor-contribution.entity';
 import { EventsService } from '../events/events.service';
 import { CreateSponsorTierDto } from './dto/create-sponsor-tier.dto';
 import { UpdateSponsorTierDto } from './dto/update-sponsor-tier.dto';
+import { Event, EventStatus } from '../events/entities/event.entity';
+import { User } from '../users/entities/user.entity';
+import { EscrowService } from '../payments/services/escrow.service';
+import { StellarService } from '../stellar/stellar.service';
+import { AuditService } from '../audit/audit.service';
+import { Role } from '../common/decorators/roles.decorator';
 
 @Injectable()
 export class SponsorsService {
   constructor(
     @InjectRepository(SponsorTier)
     private readonly tierRepository: Repository<SponsorTier>,
+    @InjectRepository(SponsorContribution)
+    private readonly contributionRepository: Repository<SponsorContribution>,
+    @InjectRepository(User)
+    private readonly usersRepository: Repository<User>,
+    @InjectRepository(Event)
+    private readonly eventRepository: Repository<Event>,
     private readonly eventsService: EventsService,
+    private readonly escrowService: EscrowService,
+    private readonly stellarService: StellarService,
+    private readonly auditService: AuditService,
   ) {}
 
   async createTier(
@@ -72,5 +89,83 @@ export class SponsorsService {
         'Only the event organizer can manage sponsor tiers',
       );
     }
+  }
+
+  async distributeEscrow(
+    eventId: string,
+    callerId: string,
+    callerRole: Role,
+  ): Promise<{ transactionHash: string; amount: number; recipient: string }> {
+    const event = await this.eventsService.getEventById(eventId);
+
+    if (event.organizerId !== callerId && callerRole !== Role.ADMIN) {
+      throw new ForbiddenException();
+    }
+
+    if (event.status !== EventStatus.COMPLETED) {
+      throw new BadRequestException('Only completed events can distribute funds');
+    }
+
+    // Re-fetch with escrowSecretEncrypted (select: false on entity)
+    const eventWithSecret = await this.eventRepository.findOne({
+      where: { id: eventId },
+      select: ['id', 'organizerId', 'escrowPublicKey', 'escrowSecretEncrypted'],
+    });
+
+    if (!eventWithSecret?.escrowSecretEncrypted) {
+      throw new BadRequestException('Event has no escrow account configured');
+    }
+
+    const organizer = await this.usersRepository.findOne({
+      where: { id: event.organizerId },
+      select: ['id', 'stellarPublicKey'],
+    });
+
+    if (!organizer?.stellarPublicKey) {
+      throw new BadRequestException('Organizer has no linked Stellar wallet');
+    }
+
+    const total = await this.getTotalConfirmedContributions(eventId);
+    if (total <= 0) {
+      throw new BadRequestException('No confirmed contributions to distribute');
+    }
+
+    const escrowSecret = await this.escrowService.decryptEscrowSecret(
+      eventWithSecret.escrowSecretEncrypted,
+    );
+
+    const txResponse = await this.stellarService.sendPayment(
+      escrowSecret,
+      organizer.stellarPublicKey,
+      String(total),
+      'XLM',
+    );
+
+    const txHash =
+      typeof txResponse.hash === 'string' ? txResponse.hash : 'unknown';
+
+    await this.auditService.log({
+      action: 'ESCROW_RELEASED',
+      userId: callerId,
+      resourceId: eventId,
+      meta: { amount: total, recipient: organizer.stellarPublicKey, transactionHash: txHash },
+    });
+
+    return { transactionHash: txHash, amount: total, recipient: organizer.stellarPublicKey };
+  }
+
+  private async getTotalConfirmedContributions(eventId: string): Promise<number> {
+    const tiers = await this.tierRepository.find({ where: { eventId } });
+    if (tiers.length === 0) return 0;
+
+    const tierIds = tiers.map((t) => t.id);
+    const result = await this.contributionRepository
+      .createQueryBuilder('c')
+      .select('SUM(c.amount)', 'total')
+      .where('c.tierId IN (:...tierIds)', { tierIds })
+      .andWhere('c.status = :status', { status: ContributionStatus.CONFIRMED })
+      .getRawOne<{ total: string | null }>();
+
+    return Number(result?.total ?? 0);
   }
 }
