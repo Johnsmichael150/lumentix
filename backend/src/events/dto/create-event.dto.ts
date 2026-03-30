@@ -60,4 +60,14 @@ export class CreateEventDto {
   @IsInt()
   @Min(1)
   maxAttendees?: number;
+
+  /**
+   * Optional sponsorship funding goal in XLM.
+   * Omit or set to null for no goal.
+   */
+  @ApiPropertyOptional({ example: 5000, description: 'Sponsorship funding goal in XLM' })
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  fundingGoal?: number;
 }

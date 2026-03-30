@@ -74,11 +74,15 @@ export class Event {
   @Column({ nullable: true, type: 'varchar' })
   imageUrl: string | null;
 
-  @Column({ nullable: true, type: 'int' })
-  maxAttendees: number | null;
-
   @Column({ nullable: true, type: 'varchar' })
   category: string | null;
+
+  /**
+   * Optional sponsorship funding goal in XLM.
+   * NULL means no goal has been set.
+   */
+  @Column({ type: 'decimal', precision: 18, scale: 7, nullable: true, default: null })
+  fundingGoal: number | null;
 
   @CreateDateColumn()
   createdAt: Date;
