@@ -4,9 +4,11 @@ import { Event } from './entities/event.entity';
 import { EventsService } from './events.service';
 import { EventsController } from './events.controller';
 import { EventStateService } from './state/event-state.service';
+import { SponsorTier } from '../sponsors/entities/sponsor-tier.entity';
+import { UploadModule } from '../common/upload/upload.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Event])],
+  imports: [TypeOrmModule.forFeature([Event, SponsorTier]), UploadModule],
   controllers: [EventsController],
   providers: [EventsService, EventStateService],
   exports: [EventsService],

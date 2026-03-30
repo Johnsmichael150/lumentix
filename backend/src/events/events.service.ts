@@ -1,11 +1,18 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Like, FindOptionsWhere } from 'typeorm';
-import { Event } from './entities/event.entity';
+import { Event, EventStatus } from './entities/event.entity';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { ListEventsDto } from './dto/list-events.dto';
+import { DuplicateEventDto } from './dto/duplicate-event.dto';
 import { EventStateService } from './state/event-state.service';
+import { SponsorTier } from '../sponsors/entities/sponsor-tier.entity';
+import { UploadService } from '../common/upload/upload.service';
 
 export interface PaginatedResult<T> {
   data: T[];
@@ -20,7 +27,10 @@ export class EventsService {
   constructor(
     @InjectRepository(Event)
     private readonly eventRepository: Repository<Event>,
+    @InjectRepository(SponsorTier)
+    private readonly tierRepository: Repository<SponsorTier>,
     private readonly eventStateService: EventStateService,
+    private readonly uploadService: UploadService,
   ) {}
 
   async createEvent(dto: CreateEventDto, organizerId: string): Promise<Event> {
@@ -94,5 +104,53 @@ export class EventsService {
       limit,
       totalPages: Math.ceil(total / limit),
     };
+  }
+
+  async updateEventImage(
+    id: string,
+    file: Express.Multer.File,
+    callerId: string,
+  ): Promise<Event> {
+    const event = await this.getEventById(id);
+    if (event.organizerId !== callerId) throw new ForbiddenException();
+    event.imageUrl = await this.uploadService.saveFile(file);
+    return this.eventRepository.save(event);
+  }
+
+  async duplicateEvent(
+    id: string,
+    dto: DuplicateEventDto,
+    callerId: string,
+  ): Promise<Event> {
+    const source = await this.getEventById(id);
+    if (source.organizerId !== callerId) throw new ForbiddenException();
+
+    const duplicate = this.eventRepository.create({
+      title: dto.title ?? `${source.title} (Copy)`,
+      description: source.description,
+      location: source.location,
+      ticketPrice: source.ticketPrice,
+      currency: source.currency,
+      maxAttendees: source.maxAttendees,
+      category: source.category,
+      startDate: new Date(dto.startDate),
+      endDate: new Date(dto.endDate),
+      organizerId: callerId,
+      status: EventStatus.DRAFT,
+    });
+    const saved = await this.eventRepository.save(duplicate);
+
+    const tiers = await this.tierRepository.find({ where: { eventId: id } });
+    for (const tier of tiers) {
+      await this.tierRepository.save(
+        this.tierRepository.create({
+          ...tier,
+          id: undefined,
+          eventId: saved.id,
+        }),
+      );
+    }
+
+    return saved;
   }
 }

@@ -12,6 +12,7 @@ import { WalletModule } from './wallet/wallet.module';
 import { PaymentsModule } from './payments/payments.module';
 import { AuditModule } from './audit/audit.module';
 import { HealthModule } from './health/health.module';
+import { RegistrationsModule } from './registrations/registrations.module';
 
 @Module({
   imports: [
@@ -43,6 +44,7 @@ import { HealthModule } from './health/health.module';
     PaymentsModule,
     AuditModule,
     HealthModule,
+    RegistrationsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
