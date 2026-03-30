@@ -1,8 +1,10 @@
 import {
   Controller,
+  Get,
   Param,
   ParseUUIDPipe,
   Patch,
+  Query,
   UseGuards,
 } from '@nestjs/common';
 import { AdminService } from './admin.service';
@@ -12,6 +14,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UserRole } from '../users/enums/user-role.enum';
 import { ApiOperation, ApiTags, ApiBearerAuth } from '@nestjs/swagger';
 import { BruteForceService } from '../common/services/brute-force.service';
+import { ListAdminUsersDto } from './dto/list-admin-users.dto';
+import { ListAdminEventsDto } from './dto/list-admin-events.dto';
 
 @ApiTags('Admin')
 @ApiBearerAuth()
@@ -42,9 +46,36 @@ export class AdminController {
     return this.adminService.suspendEvent(id);
   }
 
+  @Get('users')
+  @ApiOperation({ summary: 'Get paginated users (admin only)' })
+  listUsers(@Query() dto: ListAdminUsersDto) {
+    return this.adminService.listUsers(dto);
+  }
+
+  @Get('users/:id')
+  @ApiOperation({ summary: 'Get full user details by ID (admin only)' })
+  getUser(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.getUserById(id);
+  }
+
+  @Patch('users/:id/unblock')
+  @ApiOperation({
+    summary: 'Unblock a blocked user',
+    description: 'Only works if currently blocked.',
+  })
+  unblockUser(@Param('id', ParseUUIDPipe) id: string) {
+    return this.adminService.unblockUser(id);
+  }
+
   @Patch('users/:id/block')
   @ApiOperation({ summary: 'Block a user from the platform' })
   blockUser(@Param('id', ParseUUIDPipe) id: string) {
     return this.adminService.blockUser(id);
+  }
+
+  @Get('events')
+  @ApiOperation({ summary: 'Get all events (admin only)' })
+  listAllEvents(@Query() dto: ListAdminEventsDto) {
+    return this.adminService.listAllEvents(dto);
   }
 }
