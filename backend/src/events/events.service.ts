@@ -10,6 +10,7 @@ import { Event, EventStatus } from './entities/event.entity';
 import { CreateEventDto } from './dto/create-event.dto';
 import { UpdateEventDto } from './dto/update-event.dto';
 import { ListEventsDto } from './dto/list-events.dto';
+import { DuplicateEventDto } from './dto/duplicate-event.dto';
 import { EventStateService } from './state/event-state.service';
 import { NotificationService } from '../notifications/notification.service';
 import { User } from '../users/entities/user.entity';

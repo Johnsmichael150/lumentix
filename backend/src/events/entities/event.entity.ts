@@ -71,6 +71,15 @@ export class Event {
   @Column({ nullable: true, type: 'text', select: false })
   escrowSecretEncrypted: string | null;
 
+  @Column({ nullable: true, type: 'varchar' })
+  imageUrl: string | null;
+
+  @Column({ nullable: true, type: 'int' })
+  maxAttendees: number | null;
+
+  @Column({ nullable: true, type: 'varchar' })
+  category: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
