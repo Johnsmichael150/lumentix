@@ -19,6 +19,8 @@ import { ListRegistrationsDto } from './dto/list-registrations.dto';
 import { TicketEntity } from '../tickets/entities/ticket.entity';
 import { RefundService } from '../payments/refunds/refund.service';
 import { AuditService } from '../audit/audit.service';
+import { NotificationService } from '../notifications/notification.service';
+import { UsersService } from '../users/users.service';
 
 export interface RegisterResult {
   registration: Registration;
@@ -39,6 +41,8 @@ export class RegistrationsService {
     private readonly refundService: RefundService,
     private readonly auditService: AuditService,
     private readonly dataSource: DataSource,
+    private readonly notificationService: NotificationService,
+    private readonly usersService: UsersService,
   ) {}
 
   // ── POST /events/:id/register ──────────────────────────────────────────────
@@ -278,28 +282,26 @@ export class RegistrationsService {
     next.status = RegistrationStatus.PENDING;
     await this.repo.save(next);
 
-    setTimeout(
-      async () => {
-        try {
-          const fresh = await this.repo.findOne({ where: { id: next.id } });
-          if (fresh && fresh.status === RegistrationStatus.PENDING) {
-            fresh.status = RegistrationStatus.WAITLISTED;
-            await this.repo.save(fresh);
-            this.logger.log(
-              `Waitlist promotion expired for registration ${next.id}`,
-            );
-            await this.promoteFromWaitlist(eventId);
-          }
-        } catch (err) {
-          this.logger.error('Waitlist expiry error', err);
-        }
-      },
-      24 * 60 * 60 * 1000,
-    );
-
     this.logger.log(
       `Promoted registration ${next.id} from waitlist for event ${eventId}`,
     );
+
+    // Send promotion email (best-effort)
+    try {
+      const user = await this.usersService.findById(next.userId);
+      const event = await this.eventsService.getEventById(eventId);
+      if (user && (user as any).email) {
+        await this.notificationService.queueEventPublishedEmail({
+          email: (user as any).email,
+          eventTitle: event.title,
+        });
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Could not send waitlist promotion email for registration ${next.id}`,
+        err,
+      );
+    }
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────

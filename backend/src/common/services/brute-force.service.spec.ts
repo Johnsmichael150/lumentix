@@ -64,4 +64,58 @@ describe('BruteForceService', () => {
       'bruteforce:attempts:1.2.3.4',
     );
   });
+
+  // ── Additional coverage ──────────────────────────────────────────────────
+
+  it('sets rolling window TTL on first attempt', async () => {
+    redisMock.incr.mockResolvedValueOnce(1);
+    redisMock.expire.mockResolvedValueOnce(1);
+
+    await service.recordFailedAttempt('5.6.7.8');
+
+    expect(redisMock.expire).toHaveBeenCalledWith(
+      'bruteforce:attempts:5.6.7.8',
+      900,
+    );
+  });
+
+  it('does not set TTL on subsequent attempts', async () => {
+    redisMock.incr.mockResolvedValueOnce(2);
+
+    await service.recordFailedAttempt('5.6.7.8');
+
+    expect(redisMock.expire).not.toHaveBeenCalled();
+  });
+
+  it('does not lock before max attempts threshold', async () => {
+    redisMock.incr.mockResolvedValueOnce(2);
+
+    await service.recordFailedAttempt('1.2.3.4');
+
+    expect(redisMock.set).not.toHaveBeenCalled();
+  });
+
+  it('uses correct Redis key prefixes', async () => {
+    redisMock.get.mockResolvedValueOnce(null);
+    await service.isLocked('10.0.0.1');
+    expect(redisMock.get).toHaveBeenCalledWith('bruteforce:locked:10.0.0.1');
+  });
+
+  it('unlock removes both locked and attempts keys', async () => {
+    redisMock.del.mockResolvedValueOnce(2);
+    await service.unlock('9.9.9.9');
+    expect(redisMock.del).toHaveBeenCalledWith(
+      'bruteforce:locked:9.9.9.9',
+      'bruteforce:attempts:9.9.9.9',
+    );
+  });
+
+  it('reset only removes attempts key, not locked key', async () => {
+    redisMock.del.mockResolvedValueOnce(1);
+    await service.reset('9.9.9.9');
+    expect(redisMock.del).toHaveBeenCalledWith('bruteforce:attempts:9.9.9.9');
+    expect(redisMock.del).not.toHaveBeenCalledWith(
+      expect.stringContaining('locked'),
+    );
+  });
 });

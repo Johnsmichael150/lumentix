@@ -7,6 +7,9 @@ import { EventsModule } from '../events/events.module';
 import { TicketEntity } from '../tickets/entities/ticket.entity';
 import { RefundModule } from '../payments/refunds/refund.module';
 import { AuditModule } from '../audit/audit.module';
+import { NotificationModule } from '../notifications/notification.module';
+import { UsersModule } from '../users/users.module';
+import { WaitlistExpiryJob } from './jobs/waitlist-expiry.job';
 
 @Module({
   imports: [
@@ -14,9 +17,11 @@ import { AuditModule } from '../audit/audit.module';
     EventsModule,
     RefundModule,
     AuditModule,
+    NotificationModule,
+    UsersModule,
   ],
   controllers: [RegistrationsController],
-  providers: [RegistrationsService],
+  providers: [RegistrationsService, WaitlistExpiryJob],
   exports: [RegistrationsService],
 })
 export class RegistrationsModule {}
