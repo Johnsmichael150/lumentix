@@ -40,4 +40,12 @@ export const envValidationSchema = Joi.object({
 
   // CORS
   CORS_ORIGIN: Joi.string().default('http://localhost:3000'),
+
+  // Refund policy
+  REFUND_CUTOFF_HOURS: Joi.number().default(24),
+  FULL_REFUND_WINDOW_HOURS: Joi.number().default(48),
+  PARTIAL_REFUND_RATE: Joi.number().default(0.5),
+
+  // Audit retention
+  AUDIT_RETENTION_DAYS: Joi.number().default(90),
 });

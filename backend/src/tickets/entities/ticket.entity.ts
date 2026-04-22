@@ -8,6 +8,7 @@ import {
 
 export type TicketStatus = 'valid' | 'used' | 'refunded' | 'expired';
 
+@Index(['eventId', 'status'])
 @Entity({ name: 'tickets' })
 export class TicketEntity {
   @PrimaryGeneratedColumn('uuid')

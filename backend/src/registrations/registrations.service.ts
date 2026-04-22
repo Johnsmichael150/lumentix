@@ -189,9 +189,10 @@ export class RegistrationsService {
 
     const hoursUntilStart =
       (new Date(event.startDate).getTime() - Date.now()) / (1000 * 60 * 60);
-    if (hoursUntilStart < 24) {
+    const cutoff = Number(process.env.REFUND_CUTOFF_HOURS ?? 24);
+    if (hoursUntilStart < cutoff) {
       throw new BadRequestException(
-        'Cancellations are not allowed within 24 hours of the event start',
+        `Refunds are not available within ${cutoff} hours of the event start.`,
       );
     }
 

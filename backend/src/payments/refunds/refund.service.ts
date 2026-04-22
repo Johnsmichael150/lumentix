@@ -145,6 +145,24 @@ export class RefundService {
       return { eligible: false, reason: 'No Stellar wallet linked', refundAmount: 0 };
     }
 
+    // Check 24h cutoff: no refund if event starts within REFUND_CUTOFF_HOURS
+    const event = await this.eventsRepository.findOne({
+      where: { id: payment.eventId },
+      select: ['id', 'startDate'],
+    });
+
+    if (event?.startDate) {
+      const cutoff = Number(process.env.REFUND_CUTOFF_HOURS ?? 24);
+      const hoursToEvent = (new Date(event.startDate).getTime() - Date.now()) / 3_600_000;
+      if (hoursToEvent < cutoff) {
+        return {
+          eligible: false,
+          reason: `Too close to event start`,
+          refundAmount: 0,
+        };
+      }
+    }
+
     const hoursSincePurchase =
       (Date.now() - payment.createdAt.getTime()) / (1000 * 60 * 60);
     const FULL_REFUND_WINDOW_HOURS = Number(

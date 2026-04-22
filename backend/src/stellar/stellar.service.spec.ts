@@ -279,4 +279,59 @@ describe('StellarService', () => {
       ).rejects.toThrow('tx_failed');
     });
   });
+
+  // ── findPaymentPath ────────────────────────────────────────────────────
+
+  describe('findPaymentPath', () => {
+    const SOURCE_PUBLIC = Keypair.random().publicKey();
+
+    it('returns path records when paths are available', async () => {
+      const mockRecords = [{ source_asset_type: 'native', path: [] }];
+      const mockServer = (service as any).server;
+      mockServer.strictReceivePaths = jest.fn().mockReturnValue({
+        call: jest.fn().mockResolvedValue({ records: mockRecords }),
+      });
+
+      const result = await service.findPaymentPath(SOURCE_PUBLIC, 'XLM', 'USDC', '10');
+
+      expect(result).toEqual(mockRecords);
+      expect(mockServer.strictReceivePaths).toHaveBeenCalled();
+    });
+
+    it('throws BadRequestException when no paths are found', async () => {
+      const mockServer = (service as any).server;
+      mockServer.strictReceivePaths = jest.fn().mockReturnValue({
+        call: jest.fn().mockResolvedValue({ records: [] }),
+      });
+
+      await expect(
+        service.findPaymentPath(SOURCE_PUBLIC, 'XLM', 'USDC', '10'),
+      ).rejects.toThrow(BadRequestException);
+    });
+  });
+
+  // ── buildPathPaymentXdr ────────────────────────────────────────────────
+
+  describe('buildPathPaymentXdr', () => {
+    it('returns a valid XDR string', async () => {
+      const { Asset: ActualAsset } = jest.requireActual('@stellar/stellar-sdk');
+      mockLoadAccount.mockResolvedValue(
+        makeMockAccount(makeBalances()),
+      );
+
+      const xdr = await service.buildPathPaymentXdr({
+        sourcePublicKey: ESCROW_PUBLIC,
+        sourceAsset: ActualAsset.native(),
+        sendMax: '15',
+        destPublicKey: DESTINATION,
+        destAsset: ActualAsset.native(),
+        destAmount: '10',
+        path: [],
+        memo: 'test-memo',
+      });
+
+      expect(typeof xdr).toBe('string');
+      expect(xdr.length).toBeGreaterThan(0);
+    });
+  });
 });

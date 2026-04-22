@@ -14,6 +14,7 @@ export enum RegistrationStatus {
   WAITLISTED = 'waitlisted',
 }
 
+@Index(['eventId', 'status'])
 @Entity('registrations')
 export class Registration {
   @PrimaryGeneratedColumn('uuid')
