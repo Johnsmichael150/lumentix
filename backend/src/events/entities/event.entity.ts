@@ -58,6 +58,9 @@ export class Event {
   @Column()
   organizerId: string;
 
+  @Column({ nullable: true, type: 'uuid' })
+  seriesId: string | null;
+
   @Column({
     type: 'enum',
     enum: EventStatus,

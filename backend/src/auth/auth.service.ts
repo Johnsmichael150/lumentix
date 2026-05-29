@@ -31,22 +31,15 @@ export class AuthService {
   ) {}
 
   async register(dto: RegisterDto): Promise<{ access_token: string }> {
-    const user = await this.usersService.createUser({ email: dto.email, password: dto.password, role: dto.role });
-    return this.signToken(user.id, user.role);
-  }
-
-  async login(dto: LoginDto): Promise<{ access_token: string; refresh_token: string }> {
-  async register(dto: RegisterDto): Promise<{ accessToken: string; refreshToken: string }> {
     const user = await this.usersService.createUser({
       email: dto.email,
       password: dto.password,
       role: dto.role,
     });
-
     return this.signToken(user.id, user.role);
   }
 
-  async login(dto: LoginDto): Promise<{ accessToken: string; refreshToken: string }> {
+  async login(dto: LoginDto): Promise<{ access_token: string; refresh_token: string }> {
     const user = await this.usersService.findByEmail(dto.email);
     if (!user) throw new UnauthorizedException('Invalid credentials');
     const ok = await bcrypt.compare(dto.password, user.passwordHash);
@@ -79,7 +72,12 @@ export class AuthService {
     if (!user) return { message: 'If the email exists, password reset instructions have been sent.' };
 
     const rawSecret = crypto.randomBytes(32).toString('hex');
-    const token = this.passwordResetTokenRepository.create({ userId: user.id, tokenHash: '', expiresAt: new Date(Date.now() + 3600000), used: false });
+    const token = this.passwordResetTokenRepository.create({
+      userId: user.id,
+      tokenHash: '',
+      expiresAt: new Date(Date.now() + 3600000),
+      used: false,
+    });
     const saved = await this.passwordResetTokenRepository.save(token);
     saved.tokenHash = await bcrypt.hash(rawSecret, SALT);
     await this.passwordResetTokenRepository.save(saved);
@@ -87,8 +85,11 @@ export class AuthService {
     const rawToken = `${saved.id}:${rawSecret}`;
     const base = this.configService.get<string>('FRONTEND_URL', 'http://localhost:3000');
     const resetUrl = `${base}/reset-password?token=${encodeURIComponent(rawToken)}`;
-    await this.mailerService.send(user.email, 'Lumentix Password Reset',
-      `<p>Click to reset: <a href="${resetUrl}">Reset your password</a></p>`);
+    await this.mailerService.send(
+      user.email,
+      'Lumentix Password Reset',
+      `<p>Click to reset: <a href="${resetUrl}">Reset your password</a></p>`,
+    );
     return { message: 'If the email exists, password reset instructions have been sent.' };
   }
 
@@ -114,7 +115,9 @@ export class AuthService {
     const raw = crypto.randomBytes(48).toString('hex');
     const tokenHash = await bcrypt.hash(raw, SALT);
     const expiresAt = new Date(Date.now() + REFRESH_TTL_DAYS * 86400000);
-    await this.refreshTokenRepository.save(this.refreshTokenRepository.create({ userId, tokenHash, expiresAt, revoked: false }));
+    await this.refreshTokenRepository.save(
+      this.refreshTokenRepository.create({ userId, tokenHash, expiresAt, revoked: false }),
+    );
     return raw;
   }
 
@@ -125,83 +128,5 @@ export class AuthService {
       if (await bcrypt.compare(rawToken, r.tokenHash)) return r;
     }
     throw new UnauthorizedException('Invalid or expired refresh token.');
-  async refresh(refreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const parts = refreshToken.split(':');
-    if (parts.length !== 2) {
-      throw new UnauthorizedException('Invalid refresh token format');
-    }
-    const [tokenId, secret] = parts;
-
-    const tokenRecord = await this.refreshTokenRepository.findOne({ where: { id: tokenId } });
-    if (!tokenRecord) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    if (tokenRecord.revoked) {
-      throw new UnauthorizedException('Refresh token is revoked');
-    }
-
-    if (tokenRecord.expiresAt.getTime() <= Date.now()) {
-      throw new UnauthorizedException('Refresh token is expired');
-    }
-
-    const isMatch = await bcrypt.compare(secret, tokenRecord.token);
-    if (!isMatch) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    // Revoke old token
-    tokenRecord.revoked = true;
-    await this.refreshTokenRepository.save(tokenRecord);
-
-    const user = await this.usersService.findById(tokenRecord.userId);
-    if (!user) {
-      throw new UnauthorizedException('User not found');
-    }
-
-    return this.signToken(user.id, user.role);
-  }
-
-  async logout(refreshToken: string): Promise<void> {
-    const parts = refreshToken.split(':');
-    if (parts.length !== 2) {
-      throw new UnauthorizedException('Invalid refresh token format');
-    }
-    const [tokenId, secret] = parts;
-
-    const tokenRecord = await this.refreshTokenRepository.findOne({ where: { id: tokenId } });
-    if (!tokenRecord) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    const isMatch = await bcrypt.compare(secret, tokenRecord.token);
-    if (!isMatch) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    tokenRecord.revoked = true;
-    await this.refreshTokenRepository.save(tokenRecord);
-  }
-
-  private async signToken(userId: string, role: string): Promise<{ accessToken: string; refreshToken: string }> {
-    const payload: { sub: string; role: string } = { sub: userId, role };
-    const accessToken = this.jwtService.sign(payload);
-
-    const rawSecret = crypto.randomBytes(32).toString('hex');
-    const hashedSecret = await bcrypt.hash(rawSecret, BCRYPT_SALT_ROUNDS);
-
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 30); // 30 days
-
-    const tokenRecord = this.refreshTokenRepository.create({
-      userId,
-      token: hashedSecret,
-      expiresAt,
-    });
-    const savedToken = await this.refreshTokenRepository.save(tokenRecord);
-
-    const refreshToken = `${savedToken.id}:${rawSecret}`;
-
-    return { accessToken, refreshToken };
   }
 }
