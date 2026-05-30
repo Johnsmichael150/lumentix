@@ -10,6 +10,19 @@ import { PaymentsService } from '../payments/payments.service';
 import { SponsorsService } from '../sponsors/sponsors.service';
 import { ContributionsService } from '../sponsors/contributions.service';
 
+/**
+ * Shared queue type for unmatched payment events.
+ */
+export interface DlqItem {
+  id: string;
+  transactionHash: string;
+  type: string;
+  payload: Record<string, unknown>;
+  retryCount: number;
+  enqueuedAt: string;
+  lastError: string | null;
+}
+
 const RECONNECT_DELAY_MS = 5_000;
 const MAX_RECONNECT_DELAY_MS = 60_000;
 const BACKOFF_MULTIPLIER = 2;
@@ -25,6 +38,13 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
   private destroyed = false;
   consecutiveFailures: number = 0;
 
+  /**
+   * In-memory dead-letter queue.
+   * In production, replace with Bull/Redis.
+   */
+  private readonly deadLetterQueue: DlqItem[] = [];
+  private dlqProcessingInterval: ReturnType<typeof setInterval> | null = null;
+
   constructor(
     private readonly stellarService: StellarService,
     private readonly paymentsService: PaymentsService,
@@ -37,12 +57,14 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
   onModuleInit(): void {
     this.logger.log('Starting Stellar payment stream listener');
     this.connect();
+    this.startDlqProcessor();
   }
 
   onModuleDestroy(): void {
     this.destroyed = true;
     this.clearReconnectTimer();
     this.closeStream();
+    this.stopDlqProcessor();
     this.logger.log('Stellar payment stream shut down');
   }
 
@@ -161,6 +183,9 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
       this.logger.debug(
         `No pending payment or sponsor found for tx: ${transactionHash}`,
       );
+
+      // Enqueue unmatched event to dead-letter queue instead of discarding
+      this.enqueueDlq(payment, 'No matching payment or sponsor found');
     }
   }
 
@@ -174,13 +199,9 @@ export class StellarWebhookService implements OnModuleInit, OnModuleDestroy {
       );
       return true;
     } catch (err: unknown) {
-      // NotFoundException means no pending payment matched — not an error
       if (isNotFound(err)) return false;
-
-      // BadRequestException with "not found on Stellar" means tx isn't ready — skip
       if (isBadRequest(err) && isNotFoundMessage(err)) return false;
 
-      // Anything else is unexpected — log but don't crash the stream
       this.logger.error(
         `Unexpected error confirming payment for tx ${transactionHash}`,
         err,
