@@ -604,7 +604,7 @@ impl LumentixContract {
     /// Resume ticket sales for a paused event. Only the organizer can resume.
     pub fn resume_ticket_sales(env: Env, event_id: u64) -> Result<(), LumentixError> {
         let mut event = storage::get_event(&env, event_id)?;
-        
+
         // Enforce organizer auth as requested
         event.organizer.require_auth();
 
@@ -1901,17 +1901,17 @@ impl LumentixContract {
     ) -> Result<u64, LumentixError> {
         organizer.require_auth();
         let event_id = Self::create_event(
-            env.clone(), 
-            organizer, 
-            name, 
+            env.clone(),
+            organizer,
+            name,
             String::from_str(&env, "Virtual event with streaming"), // description
             String::from_str(&env, "Online"), // location
-            start_time, 
-            end_time, 
-            ticket_price, 
+            start_time,
+            end_time,
+            ticket_price,
             max_tickets
         )?;
-        
+
         let url_key = (soroban_sdk::symbol_short!("STRM_URL"), event_id);
         env.storage().persistent().set(&url_key, &streaming_url);
         env.storage().persistent().extend_ttl(&url_key, crate::types::PERSISTENT_LIFETIME, crate::types::PERSISTENT_LIFETIME);
@@ -1932,7 +1932,7 @@ impl LumentixContract {
         if event.organizer != organizer {
             return Err(LumentixError::Unauthorized);
         }
-        
+
         let access_key = (soroban_sdk::symbol_short!("STRM_ACC"), event_id, user);
         env.storage().persistent().set(&access_key, &has_access);
         env.storage().persistent().extend_ttl(&access_key, crate::types::PERSISTENT_LIFETIME, crate::types::PERSISTENT_LIFETIME);
@@ -1946,13 +1946,13 @@ impl LumentixContract {
         user: Address,
     ) -> Result<(), LumentixError> {
         user.require_auth();
-        
+
         let access_key = (soroban_sdk::symbol_short!("STRM_ACC"), event_id, user.clone());
         let has_access: bool = env.storage().persistent().get(&access_key).unwrap_or(false);
         if !has_access {
             return Err(LumentixError::Unauthorized);
         }
-        
+
         let att_key = (soroban_sdk::symbol_short!("VIRT_ATT"), event_id, user);
         env.storage().persistent().set(&att_key, &true);
         env.storage().persistent().extend_ttl(&att_key, crate::types::PERSISTENT_LIFETIME, crate::types::PERSISTENT_LIFETIME);

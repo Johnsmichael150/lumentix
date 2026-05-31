@@ -217,29 +217,29 @@ mod sponsor_tests {
     }
 }
 
-mod contract;
-mod error;
-mod events;
+pub mod contract;
+pub mod error;
+pub mod events;
 pub mod lumentix_contract;
-mod models;
+pub mod models;
 pub mod storage;
 pub mod types;
 pub mod validation;
 
 #[cfg(test)]
-mod test;
+pub mod test;
 
 #[cfg(test)]
-mod tests;
+pub mod tests;
 
 #[cfg(test)]
-mod get_protocol_fee_test;
+pub mod get_protocol_fee_test;
 
 #[cfg(test)]
-mod withdraw_platform_fees_test;
+pub mod withdraw_platform_fees_test;
 
 #[cfg(test)]
-mod vip_accessibility_currency_seat_tests;
+pub mod vip_accessibility_currency_seat_tests;
 
 pub use contract::TicketContract;
 pub use error::LumentixError;

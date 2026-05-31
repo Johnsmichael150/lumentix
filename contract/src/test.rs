@@ -4380,7 +4380,7 @@ fn test_concurrent_event_operations_multiple_organizers() {
     // 3. Verify get_tickets_by_buyer returns tickets from both events
     let buyer_tickets = client.get_tickets_by_buyer(&buyer);
     assert_eq!(buyer_tickets.len(), 2);
-    
+
     let mut has_a = false;
     let mut has_b = false;
     for ticket in buyer_tickets.iter() {
@@ -4435,7 +4435,7 @@ fn test_concurrent_event_operations_multiple_organizers() {
     // Event A had 1 ticket sold, but was refunded (tickets_sold = 0)
     // Event B had 1 ticket sold (tickets_sold = 1)
     assert_eq!(client.get_total_tickets_sold(), 1);
-    
+
     assert_eq!(client.get_organizer_total_revenue(&organizer_a), 0);
     assert_eq!(client.get_organizer_total_revenue(&organizer_b), 200);
 }
@@ -4461,7 +4461,7 @@ fn test_withdraw_funds_success() {
     // Withdraw funds
     let withdraw_amount = 200i128;
     let new_balance = client.withdraw_funds(&organizer, &event_id, &withdraw_amount);
-    
+
     // Verify balance updated correctly
     assert_eq!(new_balance, 300i128);
     assert_eq!(client.get_escrow_balance(&event_id), 300i128);
@@ -4489,7 +4489,7 @@ fn test_withdraw_funds_by_admin() {
     // Admin withdraws funds
     let withdraw_amount = 200i128;
     let new_balance = client.withdraw_funds(&admin, &event_id, &withdraw_amount);
-    
+
     // Verify balance updated correctly
     assert_eq!(new_balance, 300i128);
     assert_eq!(client.get_escrow_balance(&event_id), 300i128);
@@ -4625,7 +4625,7 @@ fn test_withdraw_all_funds() {
 
     // Withdraw all funds
     let new_balance = client.withdraw_funds(&organizer, &event_id, &deposit_amount);
-    
+
     // Verify balance is zero
     assert_eq!(new_balance, 0i128);
     assert_eq!(client.get_escrow_balance(&event_id), 0i128);
@@ -4658,7 +4658,6 @@ fn test_multiple_withdrawals() {
 
     // Final balance should be zero
     assert_eq!(client.get_escrow_balance(&event_id), 0i128);
-
 }
 
 // ============================================================================
@@ -4679,7 +4678,10 @@ fn test_bump_ticket_ttl_single_extends_without_error() {
 
     // Single TTL bump must succeed and ticket must still be readable
     let result = client.try_bump_ticket_ttl(&ticket_id);
-    assert!(result.is_ok(), "bump_ticket_ttl should succeed for existing ticket");
+    assert!(
+        result.is_ok(),
+        "bump_ticket_ttl should succeed for existing ticket"
+    );
 
     // Ticket state must be unchanged after TTL extension
     let ticket = client.get_ticket_info(&ticket_id);
@@ -4753,10 +4755,16 @@ fn test_bump_ticket_ttl_used_ticket_still_extends() {
     client.use_ticket(&ticket_id, &organizer);
 
     let result = client.try_bump_ticket_ttl(&ticket_id);
-    assert!(result.is_ok(), "bump_ticket_ttl should succeed for used ticket");
+    assert!(
+        result.is_ok(),
+        "bump_ticket_ttl should succeed for used ticket"
+    );
 
     let ticket = client.get_ticket_info(&ticket_id);
-    assert!(ticket.used, "ticket must still be marked used after TTL bump");
+    assert!(
+        ticket.used,
+        "ticket must still be marked used after TTL bump"
+    );
 }
 
 #[test]
@@ -4837,7 +4845,11 @@ fn test_update_event_metadata_published_event_emits_event() {
                     found = true;
                     // Verify data: (event_id, organizer, time_updated)
                     if let xdr::ScVal::Vec(Some(data_vec)) = &body.data {
-                        assert_eq!(data_vec.len(), 3, "EventMetadataUpdated must carry 3 fields");
+                        assert_eq!(
+                            data_vec.len(),
+                            3,
+                            "EventMetadataUpdated must carry 3 fields"
+                        );
                     } else {
                         panic!("Expected Vec data for EventMetadataUpdated");
                     }
@@ -5080,7 +5092,11 @@ fn test_pause_ticket_sales_emits_event_sales_paused() {
                 if topic_sym.as_slice() == b"salespaus" {
                     found = true;
                     if let xdr::ScVal::Vec(Some(data_vec)) = &body.data {
-                        assert_eq!(data_vec.len(), 3, "EventSalesPaused must carry (event_id, organizer, timestamp)");
+                        assert_eq!(
+                            data_vec.len(),
+                            3,
+                            "EventSalesPaused must carry (event_id, organizer, timestamp)"
+                        );
                     } else {
                         panic!("Expected Vec data for EventSalesPaused");
                     }
@@ -5517,10 +5533,10 @@ fn test_batch_operations_extend_ttls_dynamically() {
     let buyer = Address::generate(&env);
 
     let event_id = create_and_publish_event(&env, &client, &organizer);
-    
+
     // Purchase multiple tickets
     let ticket_ids = client.batch_purchase_tickets(&event_id, &4u32, &buyer);
-    
+
     // Extend TTL for multiple tickets to prevent accidental expiration during deep modifications
     for ticket_id in ticket_ids.iter() {
         let result = client.try_bump_ticket_ttl(&ticket_id);
@@ -5574,10 +5590,10 @@ fn test_batch_check_in_4_valid_tickets_changes_all_state_to_used() {
     let buyer = Address::generate(&env);
 
     let event_id = create_and_publish_event(&env, &client, &organizer);
-    
+
     // Purchase 4 tickets for the same user
     let ticket_ids = client.batch_purchase_tickets(&event_id, &4u32, &buyer);
-    
+
     // Batch check-in all 4 tickets
     let result = client.try_batch_use_tickets(&ticket_ids, &organizer);
     assert!(result.is_ok());
@@ -5600,7 +5616,7 @@ fn test_batch_check_in_different_user_succeeds_if_same_organizer() {
     let buyer2 = Address::generate(&env);
 
     let event_id = create_and_publish_event(&env, &client, &organizer);
-    
+
     // Purchase 3 tickets for buyer1 and 1 ticket for buyer2
     let mut ticket_ids = client.batch_purchase_tickets(&event_id, &3u32, &buyer1);
     let buyer2_ticket = client.purchase_ticket(&buyer2, &event_id, &100i128);
@@ -5627,10 +5643,10 @@ fn test_already_used_ids_in_batch_gracefully_reject_tx() {
     let buyer = Address::generate(&env);
 
     let event_id = create_and_publish_event(&env, &client, &organizer);
-    
+
     // Purchase 4 tickets
     let ticket_ids = client.batch_purchase_tickets(&event_id, &4u32, &buyer);
-    
+
     // Use one ticket individually first
     let first_ticket = ticket_ids.get(0).unwrap();
     client.use_ticket(&first_ticket, &organizer);
@@ -5931,7 +5947,7 @@ fn test_modifying_details_post_publish_correctly_surfaces_panic() {
         &100i128,
         &50u32,
     );
-    
+
     // Assert the panic correctly surfaces as InvalidStatusTransition
     assert_eq!(result, Err(Ok(LumentixError::InvalidStatusTransition)));
 }
