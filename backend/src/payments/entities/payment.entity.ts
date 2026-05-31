@@ -15,11 +15,13 @@ export enum PaymentStatus {
 }
 
 @Index(['userId', 'status'])
+@Index(['eventId', 'status']) // NEW
 @Entity('payments')
 export class Payment {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
+  @Index() // NEW
   @Column({ nullable: true })
   eventId: string | null;
 
@@ -29,6 +31,7 @@ export class Payment {
   @Column({ default: false })
   isSeasonPass: boolean;
 
+  @Index() // NEW
   @Column()
   userId: string;
 
