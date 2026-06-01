@@ -1,8 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useWallet } from '@/contexts/WalletContext';
 import usePaymentStatus from '@/hooks/usePaymentStatus';
+import { useWalletBalance } from '@/hooks/useWalletBalance';
 
 interface PaymentFlowProps {
   eventId: string;
@@ -18,12 +19,16 @@ export default function PaymentFlow({ eventId, ticketPrice, currency }: PaymentF
   const wallet = useWallet();
   const isConnected = wallet.state?.isConnected ?? wallet.isConnected;
   const connectWallet = wallet.state ? wallet.connectWallet : (wallet as any).connect;
+  const { balance, hasInsufficientFunds, shortfall: getShortfall, refreshBalance } = useWalletBalance();
 
   const [flowState, setFlowState] = useState<FlowState>('idle');
   const [paymentId, setPaymentId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const { status: paymentStatus } = usePaymentStatus(paymentId);
+
+  const insufficientFunds = ticketPrice > 0 && hasInsufficientFunds(ticketPrice);
+  const shortfall = getShortfall(ticketPrice);
 
   if (paymentStatus === 'CONFIRMED') {
     return (
@@ -65,6 +70,13 @@ export default function PaymentFlow({ eventId, ticketPrice, currency }: PaymentF
       </div>
     );
   }
+
+  // Refresh balance after successful payment
+  useEffect(() => {
+    if (paymentStatus === 'CONFIRMED') {
+      refreshBalance();
+    }
+  }, [paymentStatus, refreshBalance]);
 
   const handleRegister = async () => {
     setError(null);
@@ -110,10 +122,65 @@ export default function PaymentFlow({ eventId, ticketPrice, currency }: PaymentF
   return (
     <div className="space-y-3">
       {error && <p className="text-red-400 text-sm">{error}</p>}
+      
+      {/* Insufficient funds warning */}
+      {insufficientFunds && (
+        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
+          <div className="flex items-start gap-2">
+            <svg
+              className="w-5 h-5 text-red-400 mt-0.5 shrink-0"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
+              />
+            </svg>
+            <div className="space-y-1">
+              <p className="text-red-400 font-semibold text-sm">Insufficient XLM Balance</p>
+              <p className="text-red-300/80 text-xs">
+                You need {shortfall.toFixed(2)} more XLM to complete this transaction.
+              </p>
+              <p className="text-gray-400 text-xs">
+                Current balance: {balance.toFixed(2)} XLM | Required: {(ticketPrice + 0.50001).toFixed(2)} XLM
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 pt-2">
+            <a
+              href="https://laboratory.stellar.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs font-semibold text-blue-400 hover:underline text-center"
+            >
+              Fund via Stellar Laboratory →
+            </a>
+            {process.env.NEXT_PUBLIC_STELLAR_NETWORK === 'testnet' && wallet.publicKey && (
+              <a
+                href={`https://friendbot.stellar.org/?addr=${wallet.publicKey}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-xs font-semibold text-green-400 hover:underline text-center"
+              >
+                Get Testnet XLM →
+              </a>
+            )}
+          </div>
+        </div>
+      )}
+
       <button
         onClick={handleRegister}
-        disabled={flowState !== 'idle'}
-        className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+        disabled={flowState !== 'idle' || insufficientFunds}
+        className={`w-full py-3 rounded-xl font-semibold transition-colors ${
+          insufficientFunds
+            ? 'bg-gray-700 text-gray-400 cursor-not-allowed'
+            : 'bg-blue-600 text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed'
+        }`}
       >
         {flowState === 'connecting'
           ? 'Connecting wallet…'
@@ -125,6 +192,7 @@ export default function PaymentFlow({ eventId, ticketPrice, currency }: PaymentF
           ? 'Register (Free)'
           : `Register — ${ticketPrice} ${currency}`}
       </button>
+      
       {!isConnected && (
         <p className="text-xs text-gray-500 text-center">Requires Freighter wallet</p>
       )}
