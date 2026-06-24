@@ -133,6 +133,34 @@ export class RegistrationsController {
     return this.service.listForEvent(eventId, req.user.id, dto);
   }
 
+  @Get('events/:id/registrations/export')
+  @Roles(Role.ORGANIZER)
+  @ApiOperation({
+    summary: 'Export all registrations for an event as CSV',
+    description: 'Organizer-only. Returns all attendees as a CSV file.',
+  })
+  @ApiParam({ name: 'id', description: 'Event UUID' })
+  @ApiResponse({ status: 200, description: 'CSV file' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 429, description: 'Rate limit exceeded (10/hour per organizer)' })
+  async exportCsv(
+    @Param('id', ParseUUIDPipe) eventId: string,
+    @Req() req: AuthenticatedRequest,
+    @Res() res: Response,
+  ) {
+    const rateKey = `export-limit:${req.user.id}`;
+    const count = await this.redis.incr(rateKey);
+    if (count === 1) await this.redis.expire(rateKey, 3600);
+    if (count > 10) {
+      return res.status(429).json({ message: 'Export rate limit exceeded. Maximum 10 exports per hour.' });
+    }
+
+    const csv = await this.service.exportRegistrationsCsv(eventId, req.user.id);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="attendees-${eventId}.csv"`);
+    return res.send(csv);
+  }
+
   @Get('users/me/registrations')
   @ApiOperation({
     summary: "Get current user's registrations",

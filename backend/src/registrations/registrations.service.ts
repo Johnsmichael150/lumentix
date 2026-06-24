@@ -227,6 +227,36 @@ export class RegistrationsService {
     return saved;
   }
 
+  // ── CSV Export ────────────────────────────────────────────────────────────
+
+  async exportRegistrationsCsv(eventId: string, callerId: string): Promise<string> {
+    const event = await this.eventsService.getEventById(eventId);
+    if (event.organizerId !== callerId) throw new ForbiddenException();
+
+    const registrations = await this.repo.find({
+      where: { eventId },
+      order: { createdAt: 'ASC' },
+    });
+
+    const header = 'registrationId,email,displayName,stellarPublicKey,registeredAt,paymentStatus,ticketId\n';
+    const rows = await Promise.all(
+      registrations.map(async (r) => {
+        let email = '';
+        let displayName = '';
+        let stellarPublicKey = '';
+        try {
+          const user = await this.usersService.findById(r.userId);
+          email = (user as any).email ?? '';
+          displayName = (user as any).displayName ?? '';
+          stellarPublicKey = (user as any).stellarPublicKey ?? '';
+        } catch { /* skip */ }
+        return [r.id, email, displayName, stellarPublicKey, r.createdAt.toISOString(), r.status, r.ticketId ?? ''].join(',');
+      }),
+    );
+
+    return header + rows.join('\n');
+  }
+
   // ── Link payment on confirmation ───────────────────────────────────────────
 
   async linkPayment(
